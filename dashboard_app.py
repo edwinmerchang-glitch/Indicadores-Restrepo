@@ -1,4 +1,4 @@
-# dashboard_app.py - Versión completa con diseño premium uniforme
+# dashboard_app.py - Versión corregida
 import sqlite3
 import pandas as pd
 from datetime import datetime, date, timedelta
@@ -443,11 +443,13 @@ def get_current_month_data():
         return None
 
 # Función para crear tarjeta premium
-def crear_tarjeta_premium(card_class, title, value, target=None, suffix="", precision=0, show_progress=False, extra_stats=None):
-    if target:
-        percentage = (value / target * 100) if target > 0 else 0
-        percentage_text = f"{percentage:.1f}%"
-        color = "#ffffff"
+def crear_tarjeta_premium(card_class, title, value, target=None, suffix="", precision=0, show_progress=False, extra_stats=""):
+    if target is not None:
+        if target > 0:
+            percentage = (value / target * 100)
+            percentage_text = f"{percentage:.1f}%"
+        else:
+            percentage_text = "0%"
         
         if precision == 0:
             value_text = f"{value:,.0f}{suffix}"
@@ -469,16 +471,17 @@ def crear_tarjeta_premium(card_class, title, value, target=None, suffix="", prec
         <div class='card-value'>{value_text}</div>
     """
     
-    if target:
+    if target is not None:
         html += f"""
         <div class='card-target'>Meta: {target_text}</div>
         <div class='card-percentage'>{percentage_text}</div>
         """
         
-        if show_progress:
+        if show_progress and target > 0:
+            progress_width = min(percentage, 100)
             html += f"""
             <div class='card-progress'>
-                <div class='card-progress-bar' style='width: {min(percentage, 100)}%;'></div>
+                <div class='card-progress-bar' style='width: {progress_width}%;'></div>
             </div>
             """
     
@@ -599,7 +602,6 @@ def main():
         porcentaje_meta = (data['ventas_acumuladas'] / data['objetivo_ventas'] * 100) if data['objetivo_ventas'] > 0 else 0
         dias_restantes = max(0, 30 - data['dias_operados'])
         ritmo_actual = data['ventas_acumuladas'] / data['dias_operados'] if data['dias_operados'] > 0 else 0
-        venta_promedio_necesaria = max(0, (data['objetivo_ventas'] - data['ventas_acumuladas']) / dias_restantes) if dias_restantes > 0 else 0
         
         extra_stats = f"""
             <div class='card-stat'>
@@ -628,7 +630,6 @@ def main():
         ), unsafe_allow_html=True)
         
         st.caption(f"📅 {data['dias_operados']} días operados | {dias_restantes} días restantes")
-        st.caption(f"🎯 Meta diaria necesaria: ${venta_promedio_necesaria:,.0f}")
     
     with col2:
         st.markdown(crear_tarjeta_premium(
@@ -668,7 +669,7 @@ def main():
     # SECCIÓN 2: Comparación Día Actual vs Día Anterior
     st.subheader("📈 Comparación Diaria")
     
-    if comparison and comparison['tiene_ayer']:
+    if comparison and comparison.get('tiene_ayer', False):
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -709,10 +710,10 @@ def main():
                               comparison['ayer']['ticket_promedio'], 
                               "${:,.0f}", "")
         
-        st.caption(f"📅 Comparación entre {comparison['fecha_hoy'].strftime('%d/%m/%Y')} (hoy) y {comparison['fecha_ayer'].strftime('%d/%m/%Y')} (ayer)")
+        st.caption(f"📅 Comparación entre {comparison['fecha_hoy'].strftime('%d/%m/%Y')} (último) y {comparison['fecha_ayer'].strftime('%d/%m/%Y')} (anterior)")
     else:
-        if comparison and not comparison['tiene_ayer']:
-            st.info(f"📊 Solo hay datos para {comparison['fecha_hoy'].strftime('%d/%m/%Y')}. Carga más días para ver comparaciones.")
+        if comparison and not comparison.get('tiene_ayer', False):
+            st.info(f"📊 Solo hay datos para una fecha. Carga más días para ver comparaciones.")
         else:
             st.info("📊 Carga datos para ver comparación entre días")
     
@@ -870,7 +871,7 @@ def main():
             meta_diaria = data['objetivo_ventas'] / 30
             fig.add_trace(
                 go.Scatter(x=df_diario['fecha'], y=[meta_diaria] * len(df_diario), 
-                          name=f"Meta diaria", line=dict(color='#FF6B6B', dash='dash', width=2)),
+                          name="Meta diaria", line=dict(color='#FF6B6B', dash='dash', width=2)),
                 row=1, col=1
             )
             
