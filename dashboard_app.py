@@ -40,7 +40,7 @@ def init_database():
             )
         ''')
         
-        # Crear tabla para objetivos mensuales
+        # Crear tabla para objetivos mensuales (actualizada con articulos_por_ticket)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS objetivos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +49,7 @@ def init_database():
                 objetivo_ventas REAL,
                 objetivo_conversion REAL,
                 objetivo_ticket_promedio REAL,
+                objetivo_articulos_ticket REAL,
                 UNIQUE(mes, año)
             )
         ''')
@@ -60,9 +61,9 @@ def init_database():
                        (date.today().month, date.today().year))
         if cursor.fetchone()[0] == 0:
             cursor.execute('''
-                INSERT INTO objetivos (mes, año, objetivo_ventas, objetivo_conversion, objetivo_ticket_promedio)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (date.today().month, date.today().year, 1277000000, 37.0, 78000))
+                INSERT INTO objetivos (mes, año, objetivo_ventas, objetivo_conversion, objetivo_ticket_promedio, objetivo_articulos_ticket)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (date.today().month, date.today().year, 1277000000, 37.0, 78000, 3.5))
             conn.commit()
         
         conn.close()
@@ -162,15 +163,17 @@ def get_current_month_data():
             ventas_hoy = df_hoy['ventas_dia'].iloc[0] if not df_hoy.empty else 0
             conversion_hoy = df_hoy['conversion'].iloc[0] if not df_hoy.empty else 0
             ticket_hoy = df_hoy['ticket_promedio'].iloc[0] if not df_hoy.empty else 0
+            articulos_hoy = df_hoy['articulos_ticket'].iloc[0] if not df_hoy.empty else 0
         else:
             ventas_hoy = 0
             conversion_hoy = 0
             ticket_hoy = 0
+            articulos_hoy = 0
         
         # Obtener objetivo del mes
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT objetivo_ventas, objetivo_conversion, objetivo_ticket_promedio
+            SELECT objetivo_ventas, objetivo_conversion, objetivo_ticket_promedio, objetivo_articulos_ticket
             FROM objetivos
             WHERE mes = ? AND año = ?
         ''', (hoy.month, hoy.year))
@@ -187,9 +190,11 @@ def get_current_month_data():
             'ventas_hoy': ventas_hoy,
             'conversion_hoy': conversion_hoy,
             'ticket_promedio_hoy': ticket_hoy,
+            'articulos_hoy': articulos_hoy,
             'objetivo_ventas': objetivo[0] if objetivo else 1277000000,
             'objetivo_conversion': objetivo[1] if objetivo else 37.0,
-            'objetivo_ticket': objetivo[2] if objetivo else 78000
+            'objetivo_ticket': objetivo[2] if objetivo else 78000,
+            'objetivo_articulos': objetivo[3] if objetivo else 3.5
         }
     except Exception as e:
         st.error(f"Error obteniendo datos: {str(e)}")
@@ -200,6 +205,22 @@ def calcular_crecimiento(valor_actual, valor_anterior):
     if valor_anterior == 0:
         return 0
     return ((valor_actual - valor_anterior) / valor_anterior) * 100
+
+# Mostrar tarjeta de métrica con indicador de meta
+def metric_card_with_target(title, value, target, suffix="", precision=0):
+    color = "#00ff00" if value >= target else "#ff0000"
+    porcentaje = (value / target * 100) if target > 0 else 0
+    
+    col1, col2, col3 = st.columns([3, 1.5, 1])
+    with col1:
+        if precision == 1:
+            st.markdown(f"### {title}\n<h2 style='color:{color};'>{value:.{precision}f}{suffix}</h2>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"### {title}\n<h2 style='color:{color};'>{value:,.{precision}f}{suffix}</h2>", unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"<p style='margin-top: 30px;'><strong>Meta:</strong> {target:,.{precision}f}{suffix}</p>", unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"<p style='margin-top: 30px; color:{color};'><strong>{porcentaje:.1f}%</strong></p>", unsafe_allow_html=True)
 
 # Panel principal
 def main():
@@ -230,28 +251,30 @@ def main():
         - `ventas` (número)
         - `tickets` (número)
         - `visitas` (número)
-        - `articulos_ticket` (opcional)
+        - `articulos_ticket` (opcional, promedio de artículos por ticket)
         
         **Ejemplo:**
-        | fecha | ventas | tickets | visitas |
-        |-------|--------|---------|---------|
-        | 2026-04-01 | 32990000 | 423 | 1143 |
+        | fecha | ventas | tickets | visitas | articulos_ticket |
+        |-------|--------|---------|---------|------------------|
+        | 2026-04-01 | 32990000 | 423 | 1143 | 3.2 |
         """)
         
         st.markdown("---")
-        st.header("🎯 Configurar Objetivos")
-        objetivo_ventas = st.number_input("💰 Objetivo Ventas", value=1277000000, step=1000000, format="%d")
-        objetivo_conversion = st.number_input("📊 Objetivo Conversión (%)", value=37.0, step=1.0)
-        objetivo_ticket = st.number_input("🎫 Objetivo Ticket Promedio ($)", value=78000, step=1000)
+        st.header("🎯 Configurar Objetivos Mensuales")
+        
+        objetivo_ventas = st.number_input("💰 Objetivo Ventas ($)", value=1277000000, step=1000000, format="%d")
+        objetivo_conversion = st.number_input("📊 Objetivo Conversión (%)", value=37.0, step=1.0, format="%.1f")
+        objetivo_ticket = st.number_input("🎫 Objetivo Ticket Promedio ($)", value=78000, step=1000, format="%d")
+        objetivo_articulos = st.number_input("📦 Objetivo Artículos por Ticket", value=3.5, step=0.1, format="%.1f")
         
         if st.button("💾 Actualizar Objetivos", type="primary"):
             try:
                 conn = sqlite3.connect('ventas_dashboard.db')
                 cursor = conn.cursor()
                 cursor.execute('''
-                    INSERT OR REPLACE INTO objetivos (mes, año, objetivo_ventas, objetivo_conversion, objetivo_ticket_promedio)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (date.today().month, date.today().year, objetivo_ventas, objetivo_conversion, objetivo_ticket))
+                    INSERT OR REPLACE INTO objetivos (mes, año, objetivo_ventas, objetivo_conversion, objetivo_ticket_promedio, objetivo_articulos_ticket)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (date.today().month, date.today().year, objetivo_ventas, objetivo_conversion, objetivo_ticket, objetivo_articulos))
                 conn.commit()
                 conn.close()
                 st.success("✅ Objetivos actualizados correctamente")
@@ -266,6 +289,7 @@ def main():
         return
     
     # Métricas principales
+    st.subheader("📊 Indicadores Clave del Mes")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -273,57 +297,55 @@ def main():
         st.markdown(f"<h2 style='color:#FF6B6B;'>${data['objetivo_ventas']:,.0f}</h2>", unsafe_allow_html=True)
     
     with col2:
-        st.markdown("### 🎫 Ticket Promedio")
-        valor_ticket = data['ticket_promedio']
-        meta_ticket = data['objetivo_ticket']
-        color_ticket = "#00ff00" if valor_ticket >= meta_ticket else "#ff0000"
-        st.markdown(f"<h2 style='color:{color_ticket};'>${valor_ticket:,.0f}</h2>", unsafe_allow_html=True)
-        crecimiento_ticket = calcular_crecimiento(valor_ticket, meta_ticket)
-        st.caption(f"{'🟢' if crecimiento_ticket >= 0 else '🔴'} vs objetivo: {crecimiento_ticket:+.1f}%")
+        metric_card_with_target("🎫 Ticket Promedio", data['ticket_promedio'], data['objetivo_ticket'], "$", 0)
     
     with col3:
-        st.markdown("### 📦 Artículos por ticket")
-        st.markdown(f"<h2 style='color:#45B7D1;'>{data['articulos_ticket']:.1f}</h2>", unsafe_allow_html=True)
+        metric_card_with_target("📦 Artículos x Ticket", data['articulos_ticket'], data['objetivo_articulos'], "", 1)
     
     with col4:
-        st.markdown("### 🔄 Conversión")
-        valor_conv = data['conversion']
-        meta_conv = data['objetivo_conversion']
-        color_conv = "#00ff00" if valor_conv >= meta_conv else "#ff0000"
-        st.markdown(f"<h2 style='color:{color_conv};'>{valor_conv:.1f}%</h2>", unsafe_allow_html=True)
-        crecimiento_conv = calcular_crecimiento(valor_conv, meta_conv)
-        st.caption(f"{'🟢' if crecimiento_conv >= 0 else '🔴'} vs objetivo: {crecimiento_conv:+.1f}%")
+        metric_card_with_target("🔄 Conversión", data['conversion'], data['objetivo_conversion'], "%", 1)
     
     st.markdown("---")
     
     # Segunda fila de métricas
+    st.subheader("📈 Desempeño Diario y Acumulado")
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.markdown("### 💵 Última Venta")
+        st.markdown("### 💵 Última Venta Registrada")
         venta_hoy = data['ventas_hoy']
         promedio_diario = data['ventas_acumuladas'] / max(data['dias_operados'], 1)
         color_venta = "#00ff00" if venta_hoy > promedio_diario else "#ff0000"
         st.markdown(f"<h2 style='color:{color_venta};'>${venta_hoy:,.0f}</h2>", unsafe_allow_html=True)
-        st.caption(f"Promedio diario: ${promedio_diario:,.0f}")
+        st.caption(f"📊 Promedio diario: ${promedio_diario:,.0f}")
+        
+        # Mostrar artículos del último día
+        if data['articulos_hoy'] > 0:
+            color_arts = "#00ff00" if data['articulos_hoy'] >= data['objetivo_articulos'] else "#ff0000"
+            st.caption(f"📦 Artículos hoy: {data['articulos_hoy']:.1f} (Meta: {data['objetivo_articulos']:.1f})")
     
     with col2:
-        st.markdown("### 📊 Acumulado mensual")
+        st.markdown("### 📊 Acumulado Mensual")
         acumulado = data['ventas_acumuladas']
         porcentaje_meta = (acumulado / data['objetivo_ventas'] * 100) if data['objetivo_ventas'] > 0 else 0
         color_acumulado = "#00ff00" if acumulado >= data['objetivo_ventas'] else "#ffa500"
         st.markdown(f"<h2 style='color:{color_acumulado};'>${acumulado:,.0f}</h2>", unsafe_allow_html=True)
         st.progress(min(porcentaje_meta/100, 1.0))
-        st.caption(f"{porcentaje_meta:.1f}% de la meta mensual")
+        st.caption(f"🎯 {porcentaje_meta:.1f}% de la meta mensual")
+        
+        # Mostrar días operados
+        st.caption(f"📅 Días con datos: {data['dias_operados']}/30")
     
     with col3:
-        st.markdown("### 📈 Crecimiento Mensual")
+        st.markdown("### 📈 Crecimiento vs Mes Anterior")
         # Calcular crecimiento vs mes anterior
         try:
             conn = sqlite3.connect('ventas_dashboard.db')
             hoy = date.today()
             query_anterior = '''
-                SELECT SUM(ventas_dia) as ventas_anterior
+                SELECT 
+                    SUM(ventas_dia) as ventas_anterior,
+                    AVG(articulos_ticket) as articulos_anterior
                 FROM ventas_diarias
                 WHERE strftime('%Y-%m', fecha) = ?
             '''
@@ -332,11 +354,18 @@ def main():
             conn.close()
             
             ventas_anterior = float(df_anterior['ventas_anterior'].iloc[0]) if not df_anterior.empty and pd.notna(df_anterior['ventas_anterior'].iloc[0]) else 0
-            crecimiento = calcular_crecimiento(acumulado, ventas_anterior)
-            color_crecimiento = "#00ff00" if crecimiento >= 0 else "#ff0000"
-            st.markdown(f"<h2 style='color:{color_crecimiento};'>{crecimiento:+.1f}%</h2>", unsafe_allow_html=True)
-            st.caption(f"{'🟢' if crecimiento >= 0 else '🔴'} vs mes anterior")
-        except:
+            articulos_anterior = float(df_anterior['articulos_anterior'].iloc[0]) if not df_anterior.empty and pd.notna(df_anterior['articulos_anterior'].iloc[0]) else 0
+            
+            crecimiento_ventas = calcular_crecimiento(acumulado, ventas_anterior)
+            crecimiento_articulos = calcular_crecimiento(data['articulos_ticket'], articulos_anterior)
+            
+            color_crecimiento = "#00ff00" if crecimiento_ventas >= 0 else "#ff0000"
+            st.markdown(f"<h2 style='color:{color_crecimiento};'>{crecimiento_ventas:+.1f}%</h2>", unsafe_allow_html=True)
+            st.caption(f"{'🟢' if crecimiento_ventas >= 0 else '🔴'} en ventas")
+            
+            color_arts_crec = "#00ff00" if crecimiento_articulos >= 0 else "#ff0000"
+            st.caption(f"📦 Artículos x ticket: <span style='color:{color_arts_crec};'>{crecimiento_articulos:+.1f}%</span>", unsafe_allow_html=True)
+        except Exception as e:
             st.markdown("<h2 style='color:#ffa500;'>N/A</h2>", unsafe_allow_html=True)
             st.caption("No hay datos del mes anterior")
     
@@ -347,7 +376,7 @@ def main():
     try:
         conn = sqlite3.connect('ventas_dashboard.db')
         df_diario = pd.read_sql_query('''
-            SELECT fecha, ventas_dia, conversion, ticket_promedio
+            SELECT fecha, ventas_dia, conversion, ticket_promedio, articulos_ticket
             FROM ventas_diarias
             WHERE strftime('%Y-%m', fecha) = ?
             ORDER BY fecha
@@ -355,31 +384,54 @@ def main():
         conn.close()
         
         if not df_diario.empty:
-            fig = make_subplots(specs=[[{"secondary_y": True}]])
+            # Gráfico de ventas diarias
+            fig = make_subplots(
+                rows=2, cols=1,
+                subplot_titles=("Ventas Diarias", "Artículos por Ticket Diario"),
+                vertical_spacing=0.12,
+                row_heights=[0.6, 0.4]
+            )
             
+            # Gráfico de ventas
             fig.add_trace(
                 go.Bar(x=df_diario['fecha'], y=df_diario['ventas_dia'], name="Ventas del día", marker_color='lightblue'),
-                secondary_y=False,
+                row=1, col=1
             )
             
             meta_diaria = data['objetivo_ventas'] / 30
             fig.add_trace(
                 go.Scatter(x=df_diario['fecha'], y=[meta_diaria] * len(df_diario), 
                           name="Meta diaria", line=dict(color='red', dash='dash', width=2)),
-                secondary_y=False,
+                row=1, col=1
+            )
+            
+            # Gráfico de artículos por ticket
+            fig.add_trace(
+                go.Scatter(x=df_diario['fecha'], y=df_diario['articulos_ticket'], 
+                          name="Artículos x Ticket", line=dict(color='green', width=2),
+                          mode='lines+markers'),
+                row=2, col=1
+            )
+            
+            # Línea de meta de artículos
+            fig.add_trace(
+                go.Scatter(x=df_diario['fecha'], y=[data['objetivo_articulos']] * len(df_diario), 
+                          name=f"Meta: {data['objetivo_articulos']} artículos", 
+                          line=dict(color='orange', dash='dash', width=2)),
+                row=2, col=1
             )
             
             fig.update_layout(
-                title="Ventas Diarias del Mes Actual",
-                xaxis_title="Fecha",
-                yaxis_title="Ventas ($)",
-                height=450,
+                title="Evolución Diaria - Ventas y Artículos por Ticket",
+                height=600,
                 hovermode='x unified',
                 showlegend=True,
                 template='plotly_white'
             )
             
-            fig.update_yaxis(tickformat='$,.0f')
+            fig.update_yaxes(title_text="Ventas ($)", tickformat='$,.0f', row=1, col=1)
+            fig.update_yaxes(title_text="Artículos por Ticket", row=2, col=1)
+            fig.update_xaxes(title_text="Fecha", row=2, col=1)
             
             st.plotly_chart(fig, use_container_width=True)
             
@@ -389,7 +441,14 @@ def main():
                 df_display['ventas_dia'] = df_display['ventas_dia'].apply(lambda x: f"${x:,.0f}")
                 df_display['conversion'] = df_display['conversion'].apply(lambda x: f"{x:.1f}%")
                 df_display['ticket_promedio'] = df_display['ticket_promedio'].apply(lambda x: f"${x:,.0f}")
-                df_display.columns = ['Fecha', 'Ventas', 'Conversión', 'Ticket Promedio']
+                df_display['articulos_ticket'] = df_display['articulos_ticket'].apply(lambda x: f"{x:.1f}")
+                
+                # Agregar indicador de cumplimiento
+                df_display['Cumple Meta Artículos'] = df_diario['articulos_ticket'].apply(
+                    lambda x: '✅' if x >= data['objetivo_articulos'] else '❌'
+                )
+                
+                df_display.columns = ['Fecha', 'Ventas', 'Conversión', 'Ticket Promedio', 'Artículos x Ticket', 'Meta Artículos']
                 st.dataframe(df_display, use_container_width=True, hide_index=True)
         else:
             st.info("📭 No hay datos para el mes actual. Por favor, carga un archivo Excel con los datos.")
