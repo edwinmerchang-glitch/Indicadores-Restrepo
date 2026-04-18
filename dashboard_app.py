@@ -1,4 +1,4 @@
-# dashboard_app.py
+# dashboard_app.py (versión actualizada - solo la parte del presupuesto mensual mejorada)
 import sqlite3
 import pandas as pd
 from datetime import datetime, date, timedelta
@@ -58,6 +58,67 @@ st.markdown("""
     .trend-down {
         color: #ff0000;
         font-weight: bold;
+    }
+    /* Estilos mejorados para el presupuesto */
+    .budget-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 15px;
+        padding: 25px;
+        color: white;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        position: relative;
+        overflow: hidden;
+    }
+    .budget-card::before {
+        content: "💰";
+        position: absolute;
+        font-size: 100px;
+        opacity: 0.1;
+        bottom: -20px;
+        right: -20px;
+        transform: rotate(-15deg);
+    }
+    .budget-title {
+        font-size: 14px;
+        opacity: 0.9;
+        letter-spacing: 2px;
+        margin-bottom: 10px;
+    }
+    .budget-amount {
+        font-size: 42px;
+        font-weight: bold;
+        margin-bottom: 15px;
+    }
+    .budget-progress {
+        background-color: rgba(255,255,255,0.2);
+        border-radius: 10px;
+        height: 8px;
+        margin: 15px 0;
+        overflow: hidden;
+    }
+    .budget-progress-bar {
+        background: linear-gradient(90deg, #4CAF50, #8BC34A);
+        width: 0%;
+        height: 100%;
+        border-radius: 10px;
+        transition: width 1s ease;
+    }
+    .budget-stats {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        margin-top: 10px;
+    }
+    .budget-stat {
+        text-align: center;
+    }
+    .budget-stat-value {
+        font-size: 18px;
+        font-weight: bold;
+    }
+    .budget-stat-label {
+        font-size: 11px;
+        opacity: 0.8;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -215,7 +276,6 @@ def get_comparison_data():
     try:
         conn = sqlite3.connect('ventas_dashboard.db')
         
-        # Obtener la última fecha disponible
         df_ultima = pd.read_sql_query('''
             SELECT MAX(fecha) as ultima_fecha
             FROM ventas_diarias
@@ -228,14 +288,12 @@ def get_comparison_data():
         ultima_fecha = pd.to_datetime(df_ultima['ultima_fecha'].iloc[0]).date()
         fecha_anterior = ultima_fecha - timedelta(days=1)
         
-        # Datos del día actual (último)
         df_hoy = pd.read_sql_query('''
             SELECT fecha, ventas_dia, tickets_dia, visitas_dia, conversion, ticket_promedio, articulos_ticket
             FROM ventas_diarias
             WHERE fecha = ?
         ''', conn, params=[ultima_fecha])
         
-        # Datos del día anterior
         df_ayer = pd.read_sql_query('''
             SELECT fecha, ventas_dia, tickets_dia, visitas_dia, conversion, ticket_promedio, articulos_ticket
             FROM ventas_diarias
@@ -253,7 +311,6 @@ def get_comparison_data():
             'tiene_ayer': not df_ayer.empty
         }
         
-        # Datos de hoy
         resultado['hoy'] = {
             'ventas': float(df_hoy['ventas_dia'].iloc[0]),
             'tickets': int(df_hoy['tickets_dia'].iloc[0]),
@@ -263,7 +320,6 @@ def get_comparison_data():
             'articulos': float(df_hoy['articulos_ticket'].iloc[0])
         }
         
-        # Datos de ayer
         if not df_ayer.empty:
             resultado['ayer'] = {
                 'ventas': float(df_ayer['ventas_dia'].iloc[0]),
@@ -451,19 +507,50 @@ def main():
     
     comparison = get_comparison_data()
     
-    # SECCIÓN 1: Indicadores Clave
+    # SECCIÓN 1: Indicadores Clave con Presupuesto Mejorado
     st.subheader("📊 Indicadores Clave del Mes")
     
     col1, col2, col3, col4 = st.columns(4)
     
+    # Tarjeta de Presupuesto Mejorada (Columna 1)
     with col1:
+        # Calcular estadísticas adicionales
+        porcentaje_meta = (data['ventas_acumuladas'] / data['objetivo_ventas'] * 100) if data['objetivo_ventas'] > 0 else 0
+        dias_restantes = max(0, 30 - data['dias_operados'])
+        venta_promedio_necesaria = max(0, (data['objetivo_ventas'] - data['ventas_acumuladas']) / dias_restantes) if dias_restantes > 0 else 0
+        ritmo_actual = data['ventas_acumuladas'] / data['dias_operados'] if data['dias_operados'] > 0 else 0
+        
         st.markdown(f"""
-        <div style='background-color:#f8f9fa; border-radius:10px; padding:20px; text-align:center;'>
-            <div style='font-size:14px; color:#666;'>💰 PRESUPUESTO MENSUAL</div>
-            <div style='font-size:32px; font-weight:bold; color:#FF6B6B;'>${data['objetivo_ventas']:,.0f}</div>
+        <div class='budget-card'>
+            <div class='budget-title'>PRESUPUESTO MENSUAL</div>
+            <div class='budget-amount'>${data['objetivo_ventas']:,.0f}</div>
+            <div class='budget-progress'>
+                <div class='budget-progress-bar' style='width: {min(porcentaje_meta, 100)}%;'></div>
+            </div>
+            <div class='budget-stats'>
+                <div class='budget-stat'>
+                    <div class='budget-stat-value'>${data['ventas_acumuladas']:,.0f}</div>
+                    <div class='budget-stat-label'>Acumulado</div>
+                </div>
+                <div class='budget-stat'>
+                    <div class='budget-stat-value'>{porcentaje_meta:.1f}%</div>
+                    <div class='budget-stat-label'>Progreso</div>
+                </div>
+                <div class='budget-stat'>
+                    <div class='budget-stat-value'>${ritmo_actual:,.0f}</div>
+                    <div class='budget-stat-label'>Ritmo diario</div>
+                </div>
+            </div>
+            <div style='margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px; text-align: center;'>
+                📅 {data['dias_operados']} días operados | {dias_restantes} días restantes
+            </div>
+            <div style='font-size: 11px; text-align: center; margin-top: 5px; opacity: 0.8;'>
+                🎯 Meta diaria necesaria: ${venta_promedio_necesaria:,.0f}
+            </div>
         </div>
         """, unsafe_allow_html=True)
     
+    # Tarjeta 2: Ticket Promedio
     with col2:
         color_ticket, pct_ticket = get_percentage_color(data['ticket_promedio'], data['objetivo_ticket'])
         st.markdown(f"""
@@ -475,6 +562,7 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
+    # Tarjeta 3: Artículos por Ticket
     with col3:
         color_art, pct_art = get_percentage_color(data['articulos_ticket'], data['objetivo_articulos'])
         st.markdown(f"""
@@ -486,6 +574,7 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
+    # Tarjeta 4: Conversión
     with col4:
         color_conv, pct_conv = get_percentage_color(data['conversion'], data['objetivo_conversion'])
         st.markdown(f"""
@@ -543,7 +632,6 @@ def main():
                               comparison['ayer']['ticket_promedio'], 
                               "${:,.0f}", "")
         
-        # Mostrar fechas
         st.caption(f"📅 Comparación entre {comparison['fecha_hoy'].strftime('%d/%m/%Y')} (hoy) y {comparison['fecha_ayer'].strftime('%d/%m/%Y')} (ayer)")
     else:
         if comparison and not comparison['tiene_ayer']:
@@ -623,7 +711,7 @@ def main():
     
     st.markdown("---")
     
-    # SECCIÓN 4: Evolución Diaria (Gráfico)
+    # SECCIÓN 4: Evolución Diaria
     st.subheader("📈 Evolución Diaria")
     
     try:
