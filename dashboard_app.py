@@ -1,7 +1,7 @@
 # dashboard_app.py
 import sqlite3
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import streamlit as st
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -16,10 +16,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# CSS personalizado para mejorar la apariencia
+# CSS personalizado
 st.markdown("""
 <style>
-    /* Estilo para las tarjetas de métricas */
     .metric-card {
         background-color: #f8f9fa;
         border-radius: 10px;
@@ -28,36 +27,37 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         margin: 10px 0;
     }
-    .metric-title {
-        font-size: 14px;
-        color: #666;
-        margin-bottom: 10px;
+    .comparison-card {
+        background-color: #ffffff;
+        border-radius: 10px;
+        padding: 15px;
+        border-left: 4px solid;
+        margin: 5px 0;
     }
-    .metric-value {
-        font-size: 28px;
-        font-weight: bold;
-        margin-bottom: 5px;
-    }
-    .metric-target {
-        font-size: 12px;
-        color: #888;
-    }
-    .metric-percentage {
-        font-size: 14px;
-        font-weight: bold;
-    }
-    .green {
+    .positive {
         color: #00ff00;
     }
-    .red {
+    .negative {
         color: #ff0000;
     }
-    .orange {
+    .neutral {
         color: #ffa500;
     }
-    /* Separador */
-    hr {
-        margin: 20px 0;
+    .comparison-value {
+        font-size: 24px;
+        font-weight: bold;
+    }
+    .comparison-label {
+        font-size: 12px;
+        color: #666;
+    }
+    .trend-up {
+        color: #00ff00;
+        font-weight: bold;
+    }
+    .trend-down {
+        color: #ff0000;
+        font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -67,13 +67,12 @@ st.title("📊 Panel de Control de Ventas")
 st.caption("Indicadores Restrepo")
 st.markdown("---")
 
-# Función para migrar base de datos existente
+# Función para migrar base de datos
 def migrar_base_datos():
     try:
         conn = sqlite3.connect('ventas_dashboard.db')
         cursor = conn.cursor()
         
-        # Verificar si la tabla objetivos existe y tiene la columna objetivo_articulos_ticket
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='objetivos'")
         if cursor.fetchone():
             cursor.execute("PRAGMA table_info(objetivos)")
@@ -211,6 +210,75 @@ def import_from_excel(uploaded_file):
     except Exception as e:
         return False, str(e)
 
+# Obtener datos del día actual y anterior
+def get_comparison_data():
+    try:
+        conn = sqlite3.connect('ventas_dashboard.db')
+        
+        # Obtener la última fecha disponible
+        df_ultima = pd.read_sql_query('''
+            SELECT MAX(fecha) as ultima_fecha
+            FROM ventas_diarias
+        ''', conn)
+        
+        if df_ultima['ultima_fecha'].iloc[0] is None:
+            conn.close()
+            return None
+        
+        ultima_fecha = pd.to_datetime(df_ultima['ultima_fecha'].iloc[0]).date()
+        fecha_anterior = ultima_fecha - timedelta(days=1)
+        
+        # Datos del día actual (último)
+        df_hoy = pd.read_sql_query('''
+            SELECT fecha, ventas_dia, tickets_dia, visitas_dia, conversion, ticket_promedio, articulos_ticket
+            FROM ventas_diarias
+            WHERE fecha = ?
+        ''', conn, params=[ultima_fecha])
+        
+        # Datos del día anterior
+        df_ayer = pd.read_sql_query('''
+            SELECT fecha, ventas_dia, tickets_dia, visitas_dia, conversion, ticket_promedio, articulos_ticket
+            FROM ventas_diarias
+            WHERE fecha = ?
+        ''', conn, params=[fecha_anterior])
+        
+        conn.close()
+        
+        if df_hoy.empty:
+            return None
+        
+        resultado = {
+            'fecha_hoy': ultima_fecha,
+            'fecha_ayer': fecha_anterior if not df_ayer.empty else None,
+            'tiene_ayer': not df_ayer.empty
+        }
+        
+        # Datos de hoy
+        resultado['hoy'] = {
+            'ventas': float(df_hoy['ventas_dia'].iloc[0]),
+            'tickets': int(df_hoy['tickets_dia'].iloc[0]),
+            'visitas': int(df_hoy['visitas_dia'].iloc[0]),
+            'conversion': float(df_hoy['conversion'].iloc[0]),
+            'ticket_promedio': float(df_hoy['ticket_promedio'].iloc[0]),
+            'articulos': float(df_hoy['articulos_ticket'].iloc[0])
+        }
+        
+        # Datos de ayer
+        if not df_ayer.empty:
+            resultado['ayer'] = {
+                'ventas': float(df_ayer['ventas_dia'].iloc[0]),
+                'tickets': int(df_ayer['tickets_dia'].iloc[0]),
+                'visitas': int(df_ayer['visitas_dia'].iloc[0]),
+                'conversion': float(df_ayer['conversion'].iloc[0]),
+                'ticket_promedio': float(df_ayer['ticket_promedio'].iloc[0]),
+                'articulos': float(df_ayer['articulos_ticket'].iloc[0])
+            }
+        
+        return resultado
+    except Exception as e:
+        st.error(f"Error obteniendo comparación: {str(e)}")
+        return None
+
 # Obtener datos del mes actual
 def get_current_month_data():
     try:
@@ -264,9 +332,6 @@ def get_current_month_data():
             'articulos_ticket': float(df_mes['articulos_ticket'].iloc[0]) if not df_mes.empty and pd.notna(df_mes['articulos_ticket'].iloc[0]) else 0,
             'dias_operados': int(df_mes['dias_operados'].iloc[0]) if not df_mes.empty and pd.notna(df_mes['dias_operados'].iloc[0]) else 0,
             'ventas_hoy': ventas_hoy,
-            'conversion_hoy': conversion_hoy,
-            'ticket_promedio_hoy': ticket_hoy,
-            'articulos_hoy': articulos_hoy,
             'objetivo_ventas': objetivo[0],
             'objetivo_conversion': objetivo[1],
             'objetivo_ticket': objetivo[2],
@@ -287,6 +352,43 @@ def get_percentage_color(value, target):
         return "#ffa500", f"{percentage:.1f}%"
     else:
         return "#ff0000", f"{percentage:.1f}%"
+
+# Calcular variación
+def calcular_variacion(valor_actual, valor_anterior):
+    if valor_anterior == 0:
+        return 0
+    return ((valor_actual - valor_anterior) / valor_anterior) * 100
+
+# Mostrar tarjeta de comparación
+def mostrar_comparacion(label, valor_hoy, valor_ayer, formato="{:,.0f}", sufijo=""):
+    variacion = calcular_variacion(valor_hoy, valor_ayer)
+    color = "positive" if variacion >= 0 else "negative"
+    signo = "+" if variacion >= 0 else ""
+    
+    if formato == "{:.1f}":
+        valor_hoy_str = formato.format(valor_hoy)
+        valor_ayer_str = formato.format(valor_ayer)
+    else:
+        valor_hoy_str = formato.format(valor_hoy)
+        valor_ayer_str = formato.format(valor_ayer)
+    
+    st.markdown(f"""
+    <div class='comparison-card' style='border-left-color: {"#00ff00" if variacion >= 0 else "#ff0000"};'>
+        <div style='font-size:14px; font-weight:bold; color:#666;'>{label}</div>
+        <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px;'>
+            <div>
+                <span style='font-size:20px; font-weight:bold;'>{valor_hoy_str}{sufijo}</span>
+                <span style='font-size:12px; color:#888; margin-left:10px;'>Hoy</span>
+            </div>
+            <div class='{color}' style='font-size:16px; font-weight:bold;'>
+                {signo}{variacion:.1f}%
+            </div>
+        </div>
+        <div style='font-size:12px; color:#888; margin-top:5px;'>
+            Ayer: {valor_ayer_str}{sufijo}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Panel principal
 def main():
@@ -347,21 +449,21 @@ def main():
         st.warning("⚠️ No se pudieron cargar los datos")
         return
     
-    # Fila 1: Métricas principales
-    st.subheader("📊 Indicadores Clave")
+    comparison = get_comparison_data()
+    
+    # SECCIÓN 1: Indicadores Clave
+    st.subheader("📊 Indicadores Clave del Mes")
     
     col1, col2, col3, col4 = st.columns(4)
     
-    # Tarjeta 1: Presupuesto Mensual
     with col1:
-        st.markdown("""
+        st.markdown(f"""
         <div style='background-color:#f8f9fa; border-radius:10px; padding:20px; text-align:center;'>
             <div style='font-size:14px; color:#666;'>💰 PRESUPUESTO MENSUAL</div>
-            <div style='font-size:32px; font-weight:bold; color:#FF6B6B;'>${:,.0f}</div>
+            <div style='font-size:32px; font-weight:bold; color:#FF6B6B;'>${data['objetivo_ventas']:,.0f}</div>
         </div>
-        """.format(data['objetivo_ventas']), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
-    # Tarjeta 2: Ticket Promedio
     with col2:
         color_ticket, pct_ticket = get_percentage_color(data['ticket_promedio'], data['objetivo_ticket'])
         st.markdown(f"""
@@ -373,7 +475,6 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # Tarjeta 3: Artículos por Ticket
     with col3:
         color_art, pct_art = get_percentage_color(data['articulos_ticket'], data['objetivo_articulos'])
         st.markdown(f"""
@@ -385,7 +486,6 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # Tarjeta 4: Conversión
     with col4:
         color_conv, pct_conv = get_percentage_color(data['conversion'], data['objetivo_conversion'])
         st.markdown(f"""
@@ -399,12 +499,65 @@ def main():
     
     st.markdown("---")
     
-    # Fila 2: Desempeño
-    st.subheader("📈 Desempeño")
+    # SECCIÓN 2: Comparación Día Actual vs Día Anterior
+    st.subheader("📈 Comparación Diaria")
+    
+    if comparison and comparison['tiene_ayer']:
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            mostrar_comparacion("💰 Ventas", 
+                              comparison['hoy']['ventas'], 
+                              comparison['ayer']['ventas'], 
+                              "${:,.0f}", "")
+        
+        with col2:
+            mostrar_comparacion("🎫 Tickets", 
+                              comparison['hoy']['tickets'], 
+                              comparison['ayer']['tickets'], 
+                              "{:,.0f}", "")
+        
+        with col3:
+            mostrar_comparacion("👥 Visitas", 
+                              comparison['hoy']['visitas'], 
+                              comparison['ayer']['visitas'], 
+                              "{:,.0f}", "")
+        
+        with col4:
+            mostrar_comparacion("📦 Artículos x Ticket", 
+                              comparison['hoy']['articulos'], 
+                              comparison['ayer']['articulos'], 
+                              "{:.1f}", "")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            mostrar_comparacion("🔄 Conversión", 
+                              comparison['hoy']['conversion'], 
+                              comparison['ayer']['conversion'], 
+                              "{:.1f}", "%")
+        
+        with col2:
+            mostrar_comparacion("💵 Ticket Promedio", 
+                              comparison['hoy']['ticket_promedio'], 
+                              comparison['ayer']['ticket_promedio'], 
+                              "${:,.0f}", "")
+        
+        # Mostrar fechas
+        st.caption(f"📅 Comparación entre {comparison['fecha_hoy'].strftime('%d/%m/%Y')} (hoy) y {comparison['fecha_ayer'].strftime('%d/%m/%Y')} (ayer)")
+    else:
+        if comparison and not comparison['tiene_ayer']:
+            st.info(f"📊 Solo hay datos para {comparison['fecha_hoy'].strftime('%d/%m/%Y')}. Carga más días para ver comparaciones.")
+        else:
+            st.info("📊 Carga datos para ver comparación entre días")
+    
+    st.markdown("---")
+    
+    # SECCIÓN 3: Desempeño General
+    st.subheader("📈 Desempeño General")
     
     col1, col2, col3 = st.columns(3)
     
-    # Última Venta
     with col1:
         promedio_diario = data['ventas_acumuladas'] / max(data['dias_operados'], 1)
         color_venta = "#00ff00" if data['ventas_hoy'] > promedio_diario else "#ff0000"
@@ -416,7 +569,6 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # Acumulado Mensual
     with col2:
         porcentaje_meta = (data['ventas_acumuladas'] / data['objetivo_ventas'] * 100) if data['objetivo_ventas'] > 0 else 0
         color_acum = "#00ff00" if data['ventas_acumuladas'] >= data['objetivo_ventas'] else "#ffa500"
@@ -431,12 +583,11 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # Crecimiento
     with col3:
         try:
             conn = sqlite3.connect('ventas_dashboard.db')
             hoy = date.today()
-            mes_anterior = date(hoy.year, hoy.month, 1) - pd.Timedelta(days=1)
+            mes_anterior = date(hoy.year, hoy.month, 1) - timedelta(days=1)
             df_anterior = pd.read_sql_query('''
                 SELECT SUM(ventas_dia) as ventas_anterior
                 FROM ventas_diarias
@@ -472,7 +623,7 @@ def main():
     
     st.markdown("---")
     
-    # Gráfico
+    # SECCIÓN 4: Evolución Diaria (Gráfico)
     st.subheader("📈 Evolución Diaria")
     
     try:
@@ -493,7 +644,6 @@ def main():
                 row_heights=[0.6, 0.4]
             )
             
-            # Ventas
             fig.add_trace(
                 go.Bar(x=df_diario['fecha'], y=df_diario['ventas_dia'], 
                        name="Ventas", marker_color='#4CAF50', opacity=0.7),
@@ -507,7 +657,6 @@ def main():
                 row=1, col=1
             )
             
-            # Artículos
             fig.add_trace(
                 go.Scatter(x=df_diario['fecha'], y=df_diario['articulos_ticket'], 
                           name="Artículos x Ticket", line=dict(color='#2196F3', width=3),
@@ -536,7 +685,6 @@ def main():
             
             st.plotly_chart(fig, use_container_width=True)
             
-            # Tabla resumen
             with st.expander("📋 Ver detalle diario"):
                 df_display = df_diario.copy()
                 df_display['ventas_dia'] = df_display['ventas_dia'].apply(lambda x: f"${x:,.0f}")
