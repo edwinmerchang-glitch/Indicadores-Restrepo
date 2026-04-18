@@ -1,4 +1,4 @@
-# dashboard_app.py - Versión definitiva con componentes nativos
+# dashboard_app.py - Versión corregida con mejor formato de números
 import sqlite3
 import pandas as pd
 from datetime import datetime, date, timedelta
@@ -16,44 +16,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS minimalista solo para mejoras visuales
+# CSS minimalista
 st.markdown("""
 <style>
-    /* Estilos base */
-    .stMetric {
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #1E3A8A;
-    }
-    
-    /* Dividers personalizados */
-    .custom-divider {
-        margin: 2rem 0;
-        border-top: 1px solid #e5e7eb;
-    }
-    
-    /* Tarjetas de comparación */
-    .comparison-card {
-        background-color: white;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border: 1px solid #e5e7eb;
-        margin: 0.5rem 0;
-        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    }
-    
-    .trend-up {
-        color: #10B981;
-        font-weight: 600;
-    }
-    
-    .trend-down {
-        color: #EF4444;
-        font-weight: 600;
-    }
-    
-    /* Header */
     .main-header {
         background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%);
         padding: 1.5rem;
@@ -62,14 +27,25 @@ st.markdown("""
         text-align: center;
         color: white;
     }
-    
-    /* Info boxes */
+    .stMetric {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 0.5rem;
+    }
     .info-box {
         background-color: #EFF6FF;
         padding: 1rem;
         border-radius: 0.5rem;
         border-left: 4px solid #3B82F6;
         margin: 1rem 0;
+    }
+    /* Mejorar visibilidad de números grandes */
+    .stMetric label {
+        font-size: 0.9rem !important;
+    }
+    .stMetric .metric-value {
+        font-size: 1.8rem !important;
+        word-break: break-word !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -120,7 +96,7 @@ def init_database():
                        (date.today().month, date.today().year))
         if cursor.fetchone()[0] == 0:
             cursor.execute('''
-                INSERT INTO objetivos (mes, año, objetivo_ventas, objetivo_ventas, objetivo_conversion, objetivo_ticket_promedio, objetivo_articulos_ticket)
+                INSERT INTO objetivos (mes, año, objetivo_ventas, objetivo_conversion, objetivo_ticket_promedio, objetivo_articulos_ticket)
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', (date.today().month, date.today().year, 1277000000, 37.0, 78000, 3.5))
             conn.commit()
@@ -261,6 +237,17 @@ def calcular_variacion(valor_actual, valor_anterior):
         return 0
     return ((valor_actual - valor_anterior) / valor_anterior) * 100
 
+def formatear_numero(valor):
+    """Formatea números grandes de manera legible"""
+    if valor >= 1_000_000_000:
+        return f"${valor/1_000_000_000:.1f}B"
+    elif valor >= 1_000_000:
+        return f"${valor/1_000_000:.1f}M"
+    elif valor >= 1_000:
+        return f"${valor/1_000:.1f}K"
+    else:
+        return f"${valor:,.0f}"
+
 # Sidebar
 with st.sidebar:
     st.markdown("## 📁 Datos")
@@ -329,17 +316,19 @@ col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     porcentaje_meta = (data['ventas_acumuladas'] / data['objetivo_ventas'] * 100) if data['objetivo_ventas'] > 0 else 0
+    # Usar formato compacto para números grandes
     st.metric(
         label="💰 Presupuesto Mensual",
-        value=f"${data['objetivo_ventas']:,.0f}",
+        value=formatear_numero(data['objetivo_ventas']),
         delta=f"{porcentaje_meta:.1f}% completado"
     )
     st.progress(min(porcentaje_meta / 100, 1.0))
-    st.caption(f"Acumulado: ${data['ventas_acumuladas']:,.0f}")
+    st.caption(f"📊 Acumulado: ${data['ventas_acumuladas']:,.0f}")
 
 with col2:
     porcentaje_ticket = (data['ticket_promedio'] / data['objetivo_ticket'] * 100) if data['objetivo_ticket'] > 0 else 0
-    delta_ticket = f"{porcentaje_ticket - 100:.1f}% vs meta" if porcentaje_ticket != 100 else "Meta alcanzada"
+    diferencia_ticket = data['ticket_promedio'] - data['objetivo_ticket']
+    delta_ticket = f"{diferencia_ticket:+,.0f} vs meta"
     st.metric(
         label="🎫 Ticket Promedio",
         value=f"${data['ticket_promedio']:,.0f}",
@@ -347,11 +336,12 @@ with col2:
         delta_color="normal" if data['ticket_promedio'] >= data['objetivo_ticket'] else "inverse"
     )
     st.progress(min(porcentaje_ticket / 100, 1.0))
-    st.caption(f"Meta: ${data['objetivo_ticket']:,.0f}")
+    st.caption(f"🎯 Meta: ${data['objetivo_ticket']:,.0f}")
 
 with col3:
     porcentaje_art = (data['articulos_ticket'] / data['objetivo_articulos'] * 100) if data['objetivo_articulos'] > 0 else 0
-    delta_art = f"{porcentaje_art - 100:.1f}% vs meta" if porcentaje_art != 100 else "Meta alcanzada"
+    diferencia_art = data['articulos_ticket'] - data['objetivo_articulos']
+    delta_art = f"{diferencia_art:+.1f} vs meta"
     st.metric(
         label="📦 Artículos por Ticket",
         value=f"{data['articulos_ticket']:.1f}",
@@ -359,11 +349,12 @@ with col3:
         delta_color="normal" if data['articulos_ticket'] >= data['objetivo_articulos'] else "inverse"
     )
     st.progress(min(porcentaje_art / 100, 1.0))
-    st.caption(f"Meta: {data['objetivo_articulos']:.1f}")
+    st.caption(f"🎯 Meta: {data['objetivo_articulos']:.1f}")
 
 with col4:
     porcentaje_conv = (data['conversion'] / data['objetivo_conversion'] * 100) if data['objetivo_conversion'] > 0 else 0
-    delta_conv = f"{porcentaje_conv - 100:.1f}% vs meta" if porcentaje_conv != 100 else "Meta alcanzada"
+    diferencia_conv = data['conversion'] - data['objetivo_conversion']
+    delta_conv = f"{diferencia_conv:+.1f}pp vs meta"
     st.metric(
         label="🔄 Conversión",
         value=f"{data['conversion']:.1f}%",
@@ -371,7 +362,7 @@ with col4:
         delta_color="normal" if data['conversion'] >= data['objetivo_conversion'] else "inverse"
     )
     st.progress(min(porcentaje_conv / 100, 1.0))
-    st.caption(f"Meta: {data['objetivo_conversion']:.1f}%")
+    st.caption(f"🎯 Meta: {data['objetivo_conversion']:.1f}%")
 
 st.markdown("---")
 
@@ -389,7 +380,7 @@ if comparison.get('tiene_datos', False):
             delta=f"{var_ventas:+.1f}% vs ayer",
             delta_color="normal" if var_ventas >= 0 else "inverse"
         )
-        st.caption(f"Ayer: ${comparison['ayer']['ventas']:,.0f}")
+        st.caption(f"📅 Ayer: ${comparison['ayer']['ventas']:,.0f}")
     
     with col2:
         var_tickets = calcular_variacion(comparison['hoy']['tickets'], comparison['ayer']['tickets'])
@@ -399,7 +390,7 @@ if comparison.get('tiene_datos', False):
             delta=f"{var_tickets:+.1f}% vs ayer",
             delta_color="normal" if var_tickets >= 0 else "inverse"
         )
-        st.caption(f"Ayer: {comparison['ayer']['tickets']:,.0f}")
+        st.caption(f"📅 Ayer: {comparison['ayer']['tickets']:,.0f}")
     
     with col3:
         var_visitas = calcular_variacion(comparison['hoy']['visitas'], comparison['ayer']['visitas'])
@@ -409,7 +400,7 @@ if comparison.get('tiene_datos', False):
             delta=f"{var_visitas:+.1f}% vs ayer",
             delta_color="normal" if var_visitas >= 0 else "inverse"
         )
-        st.caption(f"Ayer: {comparison['ayer']['visitas']:,.0f}")
+        st.caption(f"📅 Ayer: {comparison['ayer']['visitas']:,.0f}")
     
     col1, col2, col3 = st.columns(3)
     
@@ -421,7 +412,7 @@ if comparison.get('tiene_datos', False):
             delta=f"{var_articulos:+.1f}% vs ayer",
             delta_color="normal" if var_articulos >= 0 else "inverse"
         )
-        st.caption(f"Ayer: {comparison['ayer']['articulos']:.1f}")
+        st.caption(f"📅 Ayer: {comparison['ayer']['articulos']:.1f}")
     
     with col2:
         var_conversion = calcular_variacion(comparison['hoy']['conversion'], comparison['ayer']['conversion'])
@@ -431,7 +422,7 @@ if comparison.get('tiene_datos', False):
             delta=f"{var_conversion:+.1f}% vs ayer",
             delta_color="normal" if var_conversion >= 0 else "inverse"
         )
-        st.caption(f"Ayer: {comparison['ayer']['conversion']:.1f}%")
+        st.caption(f"📅 Ayer: {comparison['ayer']['conversion']:.1f}%")
     
     with col3:
         var_ticket = calcular_variacion(comparison['hoy']['ticket_promedio'], comparison['ayer']['ticket_promedio'])
@@ -441,7 +432,7 @@ if comparison.get('tiene_datos', False):
             delta=f"{var_ticket:+.1f}% vs ayer",
             delta_color="normal" if var_ticket >= 0 else "inverse"
         )
-        st.caption(f"Ayer: ${comparison['ayer']['ticket_promedio']:,.0f}")
+        st.caption(f"📅 Ayer: ${comparison['ayer']['ticket_promedio']:,.0f}")
     
     st.info(f"📅 Comparación: {comparison['fecha_hoy'].strftime('%d/%m/%Y')} vs {comparison['fecha_ayer'].strftime('%d/%m/%Y')}")
 else:
