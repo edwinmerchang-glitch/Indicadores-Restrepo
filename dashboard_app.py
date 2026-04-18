@@ -1,4 +1,4 @@
-# dashboard_app.py (versión actualizada - solo la parte del presupuesto mensual mejorada)
+# dashboard_app.py - Versión completa con diseño premium uniforme
 import sqlite3
 import pandas as pd
 from datetime import datetime, date, timedelta
@@ -16,109 +16,157 @@ st.set_page_config(
     layout="wide"
 )
 
-# CSS personalizado
+# CSS personalizado con estilos premium para todas las tarjetas
 st.markdown("""
 <style>
-    .metric-card {
-        background-color: #f8f9fa;
-        border-radius: 10px;
-        padding: 20px;
-        text-align: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin: 10px 0;
+    /* Estilos generales */
+    .stApp {
+        background-color: #f5f7fb;
     }
-    .comparison-card {
-        background-color: #ffffff;
-        border-radius: 10px;
-        padding: 15px;
-        border-left: 4px solid;
-        margin: 5px 0;
-    }
-    .positive {
-        color: #00ff00;
-    }
-    .negative {
-        color: #ff0000;
-    }
-    .neutral {
-        color: #ffa500;
-    }
-    .comparison-value {
-        font-size: 24px;
-        font-weight: bold;
-    }
-    .comparison-label {
-        font-size: 12px;
-        color: #666;
-    }
-    .trend-up {
-        color: #00ff00;
-        font-weight: bold;
-    }
-    .trend-down {
-        color: #ff0000;
-        font-weight: bold;
-    }
-    /* Estilos mejorados para el presupuesto */
-    .budget-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    
+    /* Tarjeta premium base */
+    .premium-card {
         border-radius: 15px;
-        padding: 25px;
+        padding: 20px;
         color: white;
         box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         position: relative;
         overflow: hidden;
+        margin: 10px 0;
+        transition: transform 0.3s ease;
     }
-    .budget-card::before {
-        content: "💰";
+    .premium-card:hover {
+        transform: translateY(-5px);
+    }
+    .premium-card::before {
         position: absolute;
-        font-size: 100px;
+        font-size: 80px;
         opacity: 0.1;
-        bottom: -20px;
-        right: -20px;
-        transform: rotate(-15deg);
+        bottom: -10px;
+        right: -10px;
+        transform: rotate(-10deg);
     }
-    .budget-title {
+    
+    /* Colores específicos para cada tipo de tarjeta */
+    .card-budget { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .card-budget::before { content: "💰"; }
+    
+    .card-ticket { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+    .card-ticket::before { content: "🎫"; }
+    
+    .card-articles { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+    .card-articles::before { content: "📦"; }
+    
+    .card-conversion { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+    .card-conversion::before { content: "🔄"; }
+    
+    .card-sales { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+    .card-sales::before { content: "💵"; }
+    
+    .card-accumulated { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); }
+    .card-accumulated::before { content: "📊"; }
+    
+    .card-growth { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); }
+    .card-growth::before { content: "📈"; }
+    
+    /* Estilos comunes para todas las tarjetas */
+    .card-title {
         font-size: 14px;
         opacity: 0.9;
         letter-spacing: 2px;
         margin-bottom: 10px;
+        text-transform: uppercase;
     }
-    .budget-amount {
-        font-size: 42px;
+    .card-value {
+        font-size: 36px;
         font-weight: bold;
-        margin-bottom: 15px;
+        margin-bottom: 10px;
     }
-    .budget-progress {
+    .card-target {
+        font-size: 12px;
+        opacity: 0.8;
+        margin-bottom: 5px;
+    }
+    .card-percentage {
+        font-size: 14px;
+        font-weight: bold;
+        margin-top: 5px;
+    }
+    .card-progress {
         background-color: rgba(255,255,255,0.2);
         border-radius: 10px;
-        height: 8px;
-        margin: 15px 0;
+        height: 6px;
+        margin: 10px 0;
         overflow: hidden;
     }
-    .budget-progress-bar {
-        background: linear-gradient(90deg, #4CAF50, #8BC34A);
+    .card-progress-bar {
+        background: linear-gradient(90deg, #ffffff, rgba(255,255,255,0.5));
         width: 0%;
         height: 100%;
         border-radius: 10px;
         transition: width 1s ease;
     }
-    .budget-stats {
+    .card-stats {
         display: flex;
         justify-content: space-between;
-        font-size: 12px;
         margin-top: 10px;
-    }
-    .budget-stat {
-        text-align: center;
-    }
-    .budget-stat-value {
-        font-size: 18px;
-        font-weight: bold;
-    }
-    .budget-stat-label {
         font-size: 11px;
         opacity: 0.8;
+    }
+    .card-stat {
+        text-align: center;
+    }
+    .card-stat-value {
+        font-size: 16px;
+        font-weight: bold;
+    }
+    
+    /* Tarjeta de comparación */
+    .comparison-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border-radius: 12px;
+        padding: 15px;
+        border-left: 4px solid;
+        margin: 8px 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        transition: transform 0.2s ease;
+    }
+    .comparison-card:hover {
+        transform: translateX(5px);
+    }
+    .comparison-label {
+        font-size: 13px;
+        font-weight: bold;
+        color: #666;
+        margin-bottom: 8px;
+    }
+    .comparison-values {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-top: 10px;
+    }
+    .comparison-today {
+        font-size: 22px;
+        font-weight: bold;
+    }
+    .comparison-variation {
+        font-size: 16px;
+        font-weight: bold;
+    }
+    .comparison-yesterday {
+        font-size: 11px;
+        color: #888;
+        margin-top: 5px;
+    }
+    .trend-up { color: #00ff00; }
+    .trend-down { color: #ff0000; }
+    .trend-neutral { color: #ffa500; }
+    
+    /* Separador */
+    .section-divider {
+        margin: 30px 0 20px 0;
+        border-top: 2px solid #e0e0e0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -362,11 +410,8 @@ def get_current_month_data():
                 WHERE fecha = ?
             ''', conn, params=[ultima_fecha])
             ventas_hoy = df_hoy['ventas_dia'].iloc[0] if not df_hoy.empty else 0
-            conversion_hoy = df_hoy['conversion'].iloc[0] if not df_hoy.empty else 0
-            ticket_hoy = df_hoy['ticket_promedio'].iloc[0] if not df_hoy.empty else 0
-            articulos_hoy = df_hoy['articulos_ticket'].iloc[0] if not df_hoy.empty else 0
         else:
-            ventas_hoy = conversion_hoy = ticket_hoy = articulos_hoy = 0
+            ventas_hoy = 0
         
         cursor = conn.cursor()
         cursor.execute('''
@@ -397,17 +442,55 @@ def get_current_month_data():
         st.error(f"Error obteniendo datos: {str(e)}")
         return None
 
-# Calcular porcentaje de cumplimiento
-def get_percentage_color(value, target):
-    if target == 0:
-        return "#ffa500", "0%"
-    percentage = (value / target * 100)
-    if percentage >= 100:
-        return "#00ff00", f"{percentage:.1f}%"
-    elif percentage >= 80:
-        return "#ffa500", f"{percentage:.1f}%"
+# Función para crear tarjeta premium
+def crear_tarjeta_premium(card_class, title, value, target=None, suffix="", precision=0, show_progress=False, extra_stats=None):
+    if target:
+        percentage = (value / target * 100) if target > 0 else 0
+        percentage_text = f"{percentage:.1f}%"
+        color = "#ffffff"
+        
+        if precision == 0:
+            value_text = f"{value:,.0f}{suffix}"
+            target_text = f"{target:,.0f}{suffix}"
+        else:
+            value_text = f"{value:.{precision}f}{suffix}"
+            target_text = f"{target:.{precision}f}{suffix}"
     else:
-        return "#ff0000", f"{percentage:.1f}%"
+        percentage_text = ""
+        if precision == 0:
+            value_text = f"{value:,.0f}{suffix}"
+        else:
+            value_text = f"{value:.{precision}f}{suffix}"
+        target_text = ""
+    
+    html = f"""
+    <div class='premium-card {card_class}'>
+        <div class='card-title'>{title}</div>
+        <div class='card-value'>{value_text}</div>
+    """
+    
+    if target:
+        html += f"""
+        <div class='card-target'>Meta: {target_text}</div>
+        <div class='card-percentage'>{percentage_text}</div>
+        """
+        
+        if show_progress:
+            html += f"""
+            <div class='card-progress'>
+                <div class='card-progress-bar' style='width: {min(percentage, 100)}%;'></div>
+            </div>
+            """
+    
+    if extra_stats:
+        html += f"""
+        <div class='card-stats'>
+            {extra_stats}
+        </div>
+        """
+    
+    html += "</div>"
+    return html
 
 # Calcular variación
 def calcular_variacion(valor_actual, valor_anterior):
@@ -418,7 +501,7 @@ def calcular_variacion(valor_actual, valor_anterior):
 # Mostrar tarjeta de comparación
 def mostrar_comparacion(label, valor_hoy, valor_ayer, formato="{:,.0f}", sufijo=""):
     variacion = calcular_variacion(valor_hoy, valor_ayer)
-    color = "positive" if variacion >= 0 else "negative"
+    color = "trend-up" if variacion >= 0 else "trend-down"
     signo = "+" if variacion >= 0 else ""
     
     if formato == "{:.1f}":
@@ -430,17 +513,17 @@ def mostrar_comparacion(label, valor_hoy, valor_ayer, formato="{:,.0f}", sufijo=
     
     st.markdown(f"""
     <div class='comparison-card' style='border-left-color: {"#00ff00" if variacion >= 0 else "#ff0000"};'>
-        <div style='font-size:14px; font-weight:bold; color:#666;'>{label}</div>
-        <div style='display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px;'>
+        <div class='comparison-label'>{label}</div>
+        <div class='comparison-values'>
             <div>
-                <span style='font-size:20px; font-weight:bold;'>{valor_hoy_str}{sufijo}</span>
-                <span style='font-size:12px; color:#888; margin-left:10px;'>Hoy</span>
+                <span class='comparison-today'>{valor_hoy_str}{sufijo}</span>
+                <span style='font-size:11px; color:#888; margin-left:8px;'>Hoy</span>
             </div>
-            <div class='{color}' style='font-size:16px; font-weight:bold;'>
+            <div class='comparison-variation {color}'>
                 {signo}{variacion:.1f}%
             </div>
         </div>
-        <div style='font-size:12px; color:#888; margin-top:5px;'>
+        <div class='comparison-yesterday'>
             Ayer: {valor_ayer_str}{sufijo}
         </div>
     </div>
@@ -507,86 +590,80 @@ def main():
     
     comparison = get_comparison_data()
     
-    # SECCIÓN 1: Indicadores Clave con Presupuesto Mejorado
+    # SECCIÓN 1: Indicadores Clave del Mes (Tarjetas Premium)
     st.subheader("📊 Indicadores Clave del Mes")
     
     col1, col2, col3, col4 = st.columns(4)
     
-    # Tarjeta de Presupuesto Mejorada (Columna 1)
     with col1:
-        # Calcular estadísticas adicionales
         porcentaje_meta = (data['ventas_acumuladas'] / data['objetivo_ventas'] * 100) if data['objetivo_ventas'] > 0 else 0
         dias_restantes = max(0, 30 - data['dias_operados'])
-        venta_promedio_necesaria = max(0, (data['objetivo_ventas'] - data['ventas_acumuladas']) / dias_restantes) if dias_restantes > 0 else 0
         ritmo_actual = data['ventas_acumuladas'] / data['dias_operados'] if data['dias_operados'] > 0 else 0
+        venta_promedio_necesaria = max(0, (data['objetivo_ventas'] - data['ventas_acumuladas']) / dias_restantes) if dias_restantes > 0 else 0
         
-        st.markdown(f"""
-        <div class='budget-card'>
-            <div class='budget-title'>PRESUPUESTO MENSUAL</div>
-            <div class='budget-amount'>${data['objetivo_ventas']:,.0f}</div>
-            <div class='budget-progress'>
-                <div class='budget-progress-bar' style='width: {min(porcentaje_meta, 100)}%;'></div>
+        extra_stats = f"""
+            <div class='card-stat'>
+                <div class='card-stat-value'>${data['ventas_acumuladas']:,.0f}</div>
+                <div>Acumulado</div>
             </div>
-            <div class='budget-stats'>
-                <div class='budget-stat'>
-                    <div class='budget-stat-value'>${data['ventas_acumuladas']:,.0f}</div>
-                    <div class='budget-stat-label'>Acumulado</div>
-                </div>
-                <div class='budget-stat'>
-                    <div class='budget-stat-value'>{porcentaje_meta:.1f}%</div>
-                    <div class='budget-stat-label'>Progreso</div>
-                </div>
-                <div class='budget-stat'>
-                    <div class='budget-stat-value'>${ritmo_actual:,.0f}</div>
-                    <div class='budget-stat-label'>Ritmo diario</div>
-                </div>
+            <div class='card-stat'>
+                <div class='card-stat-value'>{porcentaje_meta:.1f}%</div>
+                <div>Progreso</div>
             </div>
-            <div style='margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 11px; text-align: center;'>
-                📅 {data['dias_operados']} días operados | {dias_restantes} días restantes
+            <div class='card-stat'>
+                <div class='card-stat-value'>${ritmo_actual:,.0f}</div>
+                <div>Ritmo diario</div>
             </div>
-            <div style='font-size: 11px; text-align: center; margin-top: 5px; opacity: 0.8;'>
-                🎯 Meta diaria necesaria: ${venta_promedio_necesaria:,.0f}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        """
+        
+        st.markdown(crear_tarjeta_premium(
+            "card-budget", 
+            "PRESUPUESTO MENSUAL", 
+            data['objetivo_ventas'], 
+            None, 
+            "$", 
+            0, 
+            True,
+            extra_stats
+        ), unsafe_allow_html=True)
+        
+        st.caption(f"📅 {data['dias_operados']} días operados | {dias_restantes} días restantes")
+        st.caption(f"🎯 Meta diaria necesaria: ${venta_promedio_necesaria:,.0f}")
     
-    # Tarjeta 2: Ticket Promedio
     with col2:
-        color_ticket, pct_ticket = get_percentage_color(data['ticket_promedio'], data['objetivo_ticket'])
-        st.markdown(f"""
-        <div style='background-color:#f8f9fa; border-radius:10px; padding:20px; text-align:center;'>
-            <div style='font-size:14px; color:#666;'>🎫 TICKET PROMEDIO</div>
-            <div style='font-size:32px; font-weight:bold; color:{color_ticket};'>${data['ticket_promedio']:,.0f}</div>
-            <div style='font-size:12px; color:#888;'>Meta: ${data['objetivo_ticket']:,.0f}</div>
-            <div style='font-size:14px; font-weight:bold; color:{color_ticket};'>{pct_ticket}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(crear_tarjeta_premium(
+            "card-ticket", 
+            "TICKET PROMEDIO", 
+            data['ticket_promedio'], 
+            data['objetivo_ticket'], 
+            "$", 
+            0, 
+            True
+        ), unsafe_allow_html=True)
     
-    # Tarjeta 3: Artículos por Ticket
     with col3:
-        color_art, pct_art = get_percentage_color(data['articulos_ticket'], data['objetivo_articulos'])
-        st.markdown(f"""
-        <div style='background-color:#f8f9fa; border-radius:10px; padding:20px; text-align:center;'>
-            <div style='font-size:14px; color:#666;'>📦 ARTÍCULOS x TICKET</div>
-            <div style='font-size:32px; font-weight:bold; color:{color_art};'>{data['articulos_ticket']:.1f}</div>
-            <div style='font-size:12px; color:#888;'>Meta: {data['objetivo_articulos']:.1f}</div>
-            <div style='font-size:14px; font-weight:bold; color:{color_art};'>{pct_art}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(crear_tarjeta_premium(
+            "card-articles", 
+            "ARTÍCULOS x TICKET", 
+            data['articulos_ticket'], 
+            data['objetivo_articulos'], 
+            "", 
+            1, 
+            True
+        ), unsafe_allow_html=True)
     
-    # Tarjeta 4: Conversión
     with col4:
-        color_conv, pct_conv = get_percentage_color(data['conversion'], data['objetivo_conversion'])
-        st.markdown(f"""
-        <div style='background-color:#f8f9fa; border-radius:10px; padding:20px; text-align:center;'>
-            <div style='font-size:14px; color:#666;'>🔄 CONVERSIÓN</div>
-            <div style='font-size:32px; font-weight:bold; color:{color_conv};'>{data['conversion']:.1f}%</div>
-            <div style='font-size:12px; color:#888;'>Meta: {data['objetivo_conversion']:.1f}%</div>
-            <div style='font-size:14px; font-weight:bold; color:{color_conv};'>{pct_conv}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(crear_tarjeta_premium(
+            "card-conversion", 
+            "CONVERSIÓN", 
+            data['conversion'], 
+            data['objetivo_conversion'], 
+            "%", 
+            1, 
+            True
+        ), unsafe_allow_html=True)
     
-    st.markdown("---")
+    st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
     
     # SECCIÓN 2: Comparación Día Actual vs Día Anterior
     st.subheader("📈 Comparación Diaria")
@@ -639,37 +716,65 @@ def main():
         else:
             st.info("📊 Carga datos para ver comparación entre días")
     
-    st.markdown("---")
+    st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
     
-    # SECCIÓN 3: Desempeño General
+    # SECCIÓN 3: Desempeño General (Tarjetas Premium)
     st.subheader("📈 Desempeño General")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
         promedio_diario = data['ventas_acumuladas'] / max(data['dias_operados'], 1)
-        color_venta = "#00ff00" if data['ventas_hoy'] > promedio_diario else "#ff0000"
-        st.markdown(f"""
-        <div style='background-color:#f8f9fa; border-radius:10px; padding:20px;'>
-            <div style='font-size:14px; color:#666;'>💵 ÚLTIMA VENTA</div>
-            <div style='font-size:28px; font-weight:bold; color:{color_venta};'>${data['ventas_hoy']:,.0f}</div>
-            <div style='font-size:12px; color:#888;'>Promedio diario: ${promedio_diario:,.0f}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        variacion_vs_promedio = calcular_variacion(data['ventas_hoy'], promedio_diario)
+        
+        extra_stats = f"""
+            <div class='card-stat'>
+                <div class='card-stat-value'>${promedio_diario:,.0f}</div>
+                <div>Promedio diario</div>
+            </div>
+            <div class='card-stat'>
+                <div class='card-stat-value' style='color: {"#00ff00" if variacion_vs_promedio >= 0 else "#ff0000"}'>
+                    {variacion_vs_promedio:+.1f}%
+                </div>
+                <div>vs promedio</div>
+            </div>
+        """
+        
+        st.markdown(crear_tarjeta_premium(
+            "card-sales", 
+            "ÚLTIMA VENTA", 
+            data['ventas_hoy'], 
+            None, 
+            "$", 
+            0, 
+            False,
+            extra_stats
+        ), unsafe_allow_html=True)
     
     with col2:
         porcentaje_meta = (data['ventas_acumuladas'] / data['objetivo_ventas'] * 100) if data['objetivo_ventas'] > 0 else 0
-        color_acum = "#00ff00" if data['ventas_acumuladas'] >= data['objetivo_ventas'] else "#ffa500"
-        st.markdown(f"""
-        <div style='background-color:#f8f9fa; border-radius:10px; padding:20px;'>
-            <div style='font-size:14px; color:#666;'>📊 ACUMULADO MENSUAL</div>
-            <div style='font-size:28px; font-weight:bold; color:{color_acum};'>${data['ventas_acumuladas']:,.0f}</div>
-            <div style='font-size:12px; color:#888;'>{porcentaje_meta:.1f}% de la meta</div>
-            <div style='margin-top:10px; background-color:#e0e0e0; border-radius:5px; height:8px;'>
-                <div style='background-color:{color_acum}; width:{min(porcentaje_meta, 100)}%; height:8px; border-radius:5px;'></div>
+        
+        extra_stats = f"""
+            <div class='card-stat'>
+                <div class='card-stat-value'>{data['dias_operados']}/30</div>
+                <div>Días operados</div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
+            <div class='card-stat'>
+                <div class='card-stat-value'>{porcentaje_meta:.1f}%</div>
+                <div>Meta alcanzada</div>
+            </div>
+        """
+        
+        st.markdown(crear_tarjeta_premium(
+            "card-accumulated", 
+            "ACUMULADO MENSUAL", 
+            data['ventas_acumuladas'], 
+            data['objetivo_ventas'], 
+            "$", 
+            0, 
+            True,
+            extra_stats
+        ), unsafe_allow_html=True)
     
     with col3:
         try:
@@ -687,29 +792,53 @@ def main():
             
             if ventas_anterior > 0:
                 crecimiento = ((data['ventas_acumuladas'] - ventas_anterior) / ventas_anterior * 100)
-                color_crec = "#00ff00" if crecimiento >= 0 else "#ff0000"
-                st.markdown(f"""
-                <div style='background-color:#f8f9fa; border-radius:10px; padding:20px; text-align:center;'>
-                    <div style='font-size:14px; color:#666;'>📈 CRECIMIENTO vs MES ANTERIOR</div>
-                    <div style='font-size:32px; font-weight:bold; color:{color_crec};'>{crecimiento:+.1f}%</div>
-                </div>
-                """, unsafe_allow_html=True)
+                extra_stats = f"""
+                    <div class='card-stat'>
+                        <div class='card-stat-value'>${ventas_anterior:,.0f}</div>
+                        <div>Mes anterior</div>
+                    </div>
+                    <div class='card-stat'>
+                        <div class='card-stat-value' style='color: {"#00ff00" if crecimiento >= 0 else "#ff0000"}'>
+                            {crecimiento:+.1f}%
+                        </div>
+                        <div>Variación</div>
+                    </div>
+                """
+                
+                st.markdown(crear_tarjeta_premium(
+                    "card-growth", 
+                    "CRECIMIENTO", 
+                    data['ventas_acumuladas'], 
+                    None, 
+                    "$", 
+                    0, 
+                    False,
+                    extra_stats
+                ), unsafe_allow_html=True)
             else:
-                st.markdown("""
-                <div style='background-color:#f8f9fa; border-radius:10px; padding:20px; text-align:center;'>
-                    <div style='font-size:14px; color:#666;'>📈 CRECIMIENTO vs MES ANTERIOR</div>
-                    <div style='font-size:32px; font-weight:bold; color:#ffa500;'>N/A</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(crear_tarjeta_premium(
+                    "card-growth", 
+                    "CRECIMIENTO", 
+                    0, 
+                    None, 
+                    "$", 
+                    0, 
+                    False,
+                    "<div class='card-stat'>Sin datos del mes anterior</div>"
+                ), unsafe_allow_html=True)
         except:
-            st.markdown("""
-            <div style='background-color:#f8f9fa; border-radius:10px; padding:20px; text-align:center;'>
-                <div style='font-size:14px; color:#666;'>📈 CRECIMIENTO vs MES ANTERIOR</div>
-                <div style='font-size:32px; font-weight:bold; color:#ffa500;'>N/A</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(crear_tarjeta_premium(
+                "card-growth", 
+                "CRECIMIENTO", 
+                0, 
+                None, 
+                "$", 
+                0, 
+                False,
+                "<div class='card-stat'>Sin datos disponibles</div>"
+            ), unsafe_allow_html=True)
     
-    st.markdown("---")
+    st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
     
     # SECCIÓN 4: Evolución Diaria
     st.subheader("📈 Evolución Diaria")
